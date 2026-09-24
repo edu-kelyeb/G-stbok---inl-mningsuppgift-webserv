@@ -1,29 +1,54 @@
-from flask import Flask, render_template, request, redirect
-from pathlib import Path
+from flask import Flask, request, render_template_string
+import json, os
 
 app = Flask(__name__)
-COUNTER_FILE = Path(__file__).parent / "counter.txt"
+JSON_FILE = 'data.json'
 
+HTML = '''
+<h2>Nytt inlägg</h2>
+<form method="post" action="/write-json">
+    <h3>Namn</h3>
+    <input name="namn">
+    <h3>Meddelande</h3>
+    <textarea name="meddelande" rows="6" cols="40"></textarea><br>
+    <input type="submit" value="Spara">
+</form>
+<h2>Inlägg</h2>
+<pre style="background-color: #f0f0f0; padding: 10px; border: 1px solid #ccc;">
+{% for post in posts %}
+<h2>Namn: {{ post.namn }}</h2>
+<p>Meddelande: {{ post.meddelande }}</p>
+{% endfor %}
+</pre>
+'''
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        inlagg = request.form.get("inlagg", "").strip()
+# läs text från JSON-filen och returnera innehållet som en lista
+def load_posts():
+    if not os.path.exists(JSON_FILE):
+        return []
+    try:
+        with open(JSON_FILE, encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return []   # fel bör egentligen hanteras/meddelas ordentligt, men vi bryr oss inte om detta här
 
-        if inlagg:
-            with open(COUNTER_FILE, "a", encoding="utf-8") as fil:
-                fil.write(inlagg + "\n")
+@app.route('/')
+def json_demo():
+    return render_template_string(HTML, posts=load_posts(), indent=4, ensure_ascii=False)
 
-        return redirect("/")
+@app.route('/write-json', methods=['POST'])
+def write_json():
+    # ta emot listan från load_posts-funktionen och lägg till nytt innehåll
+    posts = load_posts()
+    posts.append({
+        'namn': request.form.get('namn', ''),
+        'meddelande': request.form.get('meddelande', '')
+    })
+    # vi kan hantera variabeln posts som en vanlig Python-lista, t.ex.
+    print(posts[0]['namn'] + ' skrev följande meddelande: ' + posts[0]['meddelande'])
+    # spara den uppdaterade listan som text i JSON-fil
+    with open(JSON_FILE, 'w', encoding='utf-8') as f:
+        json.dump(posts, f, indent=4, ensure_ascii=False)
+    return render_template_string(HTML, posts=posts, indent=4, ensure_ascii=False)
 
-    if COUNTER_FILE.exists():
-        with open(COUNTER_FILE, "r", encoding="utf-8") as fil:
-            inlagg = fil.readlines()
-    else:
-        inlagg = []
-
-    return render_template("index.html", inlagg=inlagg)
-
-
-if __name__ == "__main__":
-    app.run(debug=True)
+app.run(debug=True)
